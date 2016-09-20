@@ -1,0 +1,14 @@
+owner: Paradrop
+date: 2015-07-30
+name: captive-portal
+description: |
+    This app launches a virtual wifi AP and configures a captive portal.
+
+net:
+    wifi:
+        type: wifi
+        intfName: wlan0
+        ssid: pdcp
+
+download:
+    url: https://github.com/ParadropLabs/captive-portal
