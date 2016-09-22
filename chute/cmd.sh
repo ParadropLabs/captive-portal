@@ -1,5 +1,7 @@
 #!/bin/bash
 
+CLIENT_IFACE='wlan0'
+
 # Expire user sessions after one hour.
 expire=3600
 
@@ -35,7 +37,7 @@ iptables -A INPUT -p udp -i eth0 --sport 53 -j ACCEPT
 # IP address just in case name resolution fails.
 #
 # Note: even if 5nines.com does change its IP address, we'll have to restart
-# the chute to get the new address. 
+# the chute to get the new address.
 iptables -t mangle -A PREROUTING -d 5nines.com -j ACCEPT
 iptables -t mangle -A PREROUTING -d 173.229.3.10 -j ACCEPT
 
@@ -47,14 +49,14 @@ iptables -N internet -t mangle
 # At the prerouting NAT stage this will DNAT them to the local
 # webserver for them to signup if they aren't authorised
 # Packets for unauthorised users are marked for dropping later
-iptables -t mangle -A PREROUTING -s 192.168.0.0/16 -j internet
+iptables -t mangle -A PREROUTING -i ${CLIENT_IFACE} -j internet
 
 # MAC address not found. Mark the packet 99
 iptables -t mangle -A internet -j MARK --set-mark 99
 
 # Redirects web requests from Unauthorised users to logon Web Page
-iptables -t nat -A PREROUTING -m mark --mark 99 -p tcp --dport 80 -j DNAT --to-destination 192.168.128.2
-iptables -t nat -A PREROUTING -m mark --mark 99 -p tcp --dport 443 -j DNAT --to-destination 192.168.128.2:80
+iptables -t nat -A PREROUTING -m mark --mark 99 -p tcp --dport 80 -j REDIRECT --to-port 80
+iptables -t nat -A PREROUTING -m mark --mark 99 -p tcp --dport 443 -j REDIRECT --to-port 80
 
 # Do the same for the INPUT chain to stop people accessing the web through Squid
 iptables -t filter -A INPUT -p tcp --dport 80 -j ACCEPT
