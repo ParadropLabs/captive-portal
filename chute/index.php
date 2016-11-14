@@ -22,13 +22,11 @@ if ($source) {
             break;
         }
     }
-
     fclose($source);
+}
 
-    if (!$found_mac) {
-        exit;
-    }
-} else {
+// Try with arp command in case the dnsmasq file is not available.
+if (!$found_mac) {
     $mac = shell_exec("$arp -a ".$_SERVER['REMOTE_ADDR']);
     preg_match('/..:..:..:..:..:../',$mac , $matches);
     @$mac = $matches[0];
@@ -92,6 +90,7 @@ function enable_address() {
 function send_login_page() {
     global $mac;
     global $login_url;
+    global $location;
 
     echo '<!DOCTYPE html>
 <html>
@@ -100,9 +99,15 @@ function send_login_page() {
   </head>
   <body>
     <form id="redirect" action="' . $login_url . '" method="post">
-      <input type="hidden" name="mac" value="' . $mac . '">
-      <input type="submit" value="Continue">
+      <input type="hidden" name="mac" value="' . $mac . '">';
+
+    if ($location) {
+        echo '      <input type="hidden" name="location" value="' . $location . '">';
+    }
+
+    echo '      <input type="submit" value="Continue">
     </form>
+    <p>If the page does not load automatically, please click the button to continue.</p>
     <script>
       document.getElementById("redirect").submit();
     </script>
