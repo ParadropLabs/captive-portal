@@ -87,6 +87,9 @@ fi
 if [ -n "$CP_LANDING_URL" ]; then
     sed -i "s|landing_url = .*;|landing_url = \"$CP_LANDING_URL\";|" /var/www/index.php
 fi
+if [ -n "$CP_LOCATION" ]; then
+    sed -i "s|location = .*;|location = \"$CP_LOCATION\";|" /var/www/index.php
+fi
 
 /etc/init.d/apache2 restart
 /etc/init.d/dnsmasq restart

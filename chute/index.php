@@ -7,51 +7,55 @@ $site_name = "5nines.com 4g Wireless Network in conjunction with paradrop.io!";
 $auth_url = "https://5nines.com/wp-content/themes/DiviExtended/cp-mac-auth.php";
 $login_url = "https://opus.5nines.com/cp-login-1";
 $landing_url = "https://opus.5nines.com";
+$location = null;
 
 // Path to the arp command on the local server
 $arp = "/usr/sbin/arp";
 
-// The following file is used to keep track of users
-$users = "/var/www/users";
-
-// Check if we've been redirected by firewall to here.
-// If so redirect to registration address
-//if ($_SERVER['SERVER_NAME']!="$server_name.$domain_name") {
-//  header("location:http://$server_name.$domain_name/index.php?add="
-//    .urlencode($_SERVER['SERVER_NAME'].$_SERVER['REQUEST_URI']));
-//  exit;
-//}
-
 // Attempt to get the client's mac address
-$mac = shell_exec("$arp -a ".$_SERVER['REMOTE_ADDR']);
-preg_match('/..:..:..:..:..:../',$mac , $matches);
-@$mac = $matches[0];
-if (!isset($mac)) { exit; }
+$found_mac = false;
+$source = @fopen("/paradrop/dnsmasq-wifi.leases", "r");
+if ($source) {
+    while ($device = fscanf($source, "%s %s %s %s %s\n", $expiration, $mac, $ip, $name, $devid)) {
+        if ($ip == $_SERVER['REMOTE_ADDR']) {
+            $found_mac = true;
+            break;
+        }
+    }
+
+    fclose($source);
+
+    if (!$found_mac) {
+        exit;
+    }
+} else {
+    $mac = shell_exec("$arp -a ".$_SERVER['REMOTE_ADDR']);
+    preg_match('/..:..:..:..:..:../',$mac , $matches);
+    @$mac = $matches[0];
+    if (!isset($mac)) {
+        exit;
+    }
+}
 
 if (is_authenticated()) {
     enable_address();
     send_landing_page();
-
-    // Redirect to landing page.
-    // header('Location: ' . $landing_url);
-
-    // Redirect to whatever the user requested originally.
-//    header("location:http://".$_GET['add']);
 } else {
-    // Redirect to the 5nines login page with the MAC address as a parameter.
-//    $url = $login_url . '?mac=' . urlencode($mac);
-//    header('Location: ' . $url);
-
     send_login_page();
 }
 
 function is_authenticated() {
     global $auth_url;
+    global $location;
     global $mac;
 
     $curl = curl_init();
 
     $url = $auth_url . '?mac=' . urlencode($mac);
+    if ($location) {
+        $url = $url . '&location=' . urlencode($location);
+    }
+
     curl_setopt($curl, CURLOPT_URL, $url);
     curl_setopt($curl, CURLOPT_RETURNTRANSFER, 1);
     curl_setopt($curl, CURLOPT_POST, 0);
@@ -69,10 +73,6 @@ function is_authenticated() {
 function enable_address() {
     global $email;
     global $mac;
-    global $users;
-
-//    file_put_contents($users,$_POST['email']."\t"
-//        .$_SERVER['REMOTE_ADDR']."\t$mac\t".date("d.m.Y")."\n",FILE_APPEND + LOCK_EX);
 
     // The comment contains the timestamp when the rule was added, so that a
     // script can remove it after expiration.
@@ -129,27 +129,6 @@ function send_landing_page() {
     <p>You are now connected to the network.  Feel free to <a href="' . $landing_url . '">visit our landing page</a> for special offers.</p>
   </body>
 </html>';
-}
-
-// Function to print page header
-function print_header() {
-
-  ?>
-  <html>
-  <head><title>Welcome to <?php echo $site_name;?></title>
-  <META HTTP-EQUIV="CACHE-CONTROL" CONTENT="NO-CACHE">
-  <LINK rel="stylesheet" type="text/css" href="./style.css">
-  </head>
-
-  <body bgcolor=#FFFFFF text=000000>
-  <?php
-}
-
-// Function to print page footer
-function print_footer() {
-  echo "</body>";
-  echo "</html>";
-
 }
 
 ?>
