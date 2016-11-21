@@ -2,9 +2,6 @@
 
 CLIENT_IFACE='wlan0'
 
-# Expire user sessions after one hour.
-expire=3600
-
 # start captivator dependencies
 /etc/init.d/rsyslog restart
 
@@ -33,13 +30,13 @@ iptables -A OUTPUT -p udp -m udp --sport 53 -j ACCEPT
 iptables -A OUTPUT -p udp -o eth0 --dport 53 -j ACCEPT
 iptables -A INPUT -p udp -i eth0 --sport 53 -j ACCEPT
 
-# Allow traffic to the login page at 5nines.com.  Add a redundant rule based on
-# IP address just in case name resolution fails.
-#
-# Note: even if 5nines.com does change its IP address, we'll have to restart
-# the chute to get the new address.
-iptables -t mangle -A PREROUTING -d 5nines.com -j ACCEPT
+# Allow traffic to the login page at 5nines.com.  We add a couple of known IP
+# addresses here and an optional one from environment variable.
 iptables -t mangle -A PREROUTING -d 173.229.3.10 -j ACCEPT
+iptables -t mangle -A PREROUTING -d 173.229.3.20 -j ACCEPT
+if [ -n "$CP_ALLOW_DOMAIN" ]; then
+    iptables -t mangle -A PREROUTING -d "$CP_ALLOW_DOMAIN" -j ACCEPT
+fi
 
 # Create internet chain
 # This is used to authenticate users who have already signed up
@@ -90,20 +87,22 @@ fi
 if [ -n "$CP_LOCATION" ]; then
     sed -i "s|location = .*;|location = \"$CP_LOCATION\";|" /var/www/index.php
 fi
+if [ -n "$CP_EXPIRATION" ]; then
+    sed -i "s|expiration = .*;|expiration = $CP_EXPIRATION;|" /var/www/index.php
+fi
 
 /etc/init.d/apache2 restart
-/etc/init.d/dnsmasq restart
 
 while true; do
-    sleep 5m
+    sleep 1m
 
-    iptables -t mangle -L internet | grep -E "added [0-9]+" | while read line; do
+    now=$(date +%s)
+    iptables -t mangle -L internet | grep -E "expires [0-9]+" | while read line; do
         mac=$(echo "$line" | grep -oP "(?<=MAC )..:..:..:..:..:..")
-        added=$(echo "$line" | grep -oP "(?<=added )\d+")
-        diff=$(expr $(date +%s) - $added)
+        expires=$(echo "$line" | grep -oP "(?<=expires )\d+")
 
-        if [ "$diff" -gt "$expire" ]; then
-            iptables -t mangle -D internet -m mac --mac-source $mac -m comment --comment "added $added" -j RETURN
+        if [ "$now" -gt "$expires" ]; then
+            iptables -t mangle -D internet -m mac --mac-source $mac -m comment --comment "expires $expires" -j RETURN
         fi
     done
 done

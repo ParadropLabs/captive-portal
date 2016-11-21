@@ -7,7 +7,6 @@ RUN apt-get update && apt-get install -y \
 	apache2 \
 	iptables \
 	rsyslog \
-	dnsmasq \
 	conntrack \
 	aptitude \
 	libapache2-mod-php5 \
@@ -20,7 +19,7 @@ ADD chute/000-default.conf /etc/apache2/sites-available/000-default.conf
 ADD chute/cmd.sh /usr/local/bin/cmd.sh
 ADD chute/rmtrack /usr/bin/rmtrack
 ADD chute/index.php /var/www/index.php
-ADD chute/dnsmasq.conf /etc/dnsmasq.conf
+ADD chute/favicon.ico /var/www/favicon.ico
 
 RUN echo "www-data ALL = NOPASSWD: /sbin/iptables *" >> /etc/sudoers.d/www-data
 RUN echo "www-data ALL = NOPASSWD: /usr/bin/rmtrack [0-9]*.[0-9]*.[0-9]*.[0-9]*" >> /etc/sudoers.d/www-data
