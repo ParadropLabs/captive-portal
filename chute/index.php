@@ -5,10 +5,10 @@
  *
  * It uses sed commands to override these from chute environment variables.
  */
-$auth_url = "https://5nines.com/wp-content/themes/DiviExtended/cp-mac-auth.php";
-$login_url = "https://opus.5nines.com/cp-login-1";
-$landing_url = "https://opus.5nines.com";
-$location = null;
+$auth_url = "https://cp-api.5nines.com/v1.12";
+$login_url = "https://majestic.5nines.com/cp-login-1";
+$landing_url = "https://majestic.5nines.com";
+$location = 0;
 $expiration = 3600;
 
 // This shorter expiration time is used to temporarily authorize a device while
@@ -81,10 +81,7 @@ function is_authenticated() {
 
     $curl = curl_init();
 
-    $url = $auth_url . '?mac=' . urlencode($mac);
-    if ($location) {
-        $url = $url . '&location=' . urlencode($location);
-    }
+    $url = "$auth_url/$mac/$location";
 
     curl_setopt($curl, CURLOPT_URL, $url);
     curl_setopt($curl, CURLOPT_RETURNTRANSFER, 1);
