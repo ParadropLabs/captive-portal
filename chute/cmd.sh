@@ -34,9 +34,9 @@ iptables -A INPUT -p udp -i eth0 --sport 53 -j ACCEPT
 # addresses here and an optional one from environment variable.
 iptables -t mangle -A PREROUTING -d 173.229.3.10 -j ACCEPT
 iptables -t mangle -A PREROUTING -d 173.229.3.20 -j ACCEPT
-if [ -n "$CP_ALLOW_DOMAIN" ]; then
-    iptables -t mangle -A PREROUTING -d "$CP_ALLOW_DOMAIN" -j ACCEPT
-fi
+for $domain in $CP_ALLOW_DOMAIN; do
+    iptables -t mangle -A PREROUTING -d "$domain" -j ACCEPT
+done
 
 # Create internet chain
 # This is used to authenticate users who have already signed up

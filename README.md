@@ -16,6 +16,7 @@ Environment Variables
 * CP\_LANDING\_URL: URL to redirect users after they are logged in.
 * CP\_LOCATION: Location associated with the chute instance.
 * CP\_EXPIRATION: Expiration time (seconds) for client sessions.
+* CP\_ALLOW\_DOMAIN: Special destination domain(s) to allow unrestricted.  This should be a space separated list of domains, e.g. "example.com example.org".
 
 Login Flow
 ----------
