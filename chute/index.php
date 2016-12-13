@@ -66,9 +66,8 @@ function find_mac() {
 /*
  * Send a redirect (302) response.
  */
-function send_redirect() {
-    global $login_host;
-    header("Location: http://$login_host");
+function send_redirect($url) {
+    header("Location: $url");
 }
 
 /*
@@ -288,7 +287,11 @@ if ($_SERVER['HTTP_HOST'] == $login_host) {
     // For any other request, if the device should not be allowed, then return
     // a redirect (302 Found) to our server and have the client load the login
     // page.
-    send_redirect();
+//    send_redirect("http://$login_host");
+
+    $url = "$login_url/?mac=$mac";
+    send_redirect($url);
+
     $action = "redirect";
 }
 
