@@ -104,7 +104,7 @@ function enable_address($mac, $expiration) {
     $comment = "-m comment --comment 'expires $expires'";
 
     // Add PC to the firewall
-    exec("sudo iptables -I internet 1 -t mangle -m mac --mac-source $mac $comment -j RETURN");
+    exec("sudo iptables -I clients 1 -t mangle -m mac --mac-source $mac $comment -j RETURN");
 
     // The following line removes connection tracking for the PC
     // This clears any previous (incorrect) route info for the redirection
@@ -270,12 +270,12 @@ if ($_SERVER['HTTP_HOST'] == $login_host) {
         post_initial_login();
         $action = "show_login";
     }
-} elseif (isset($_SERVER['HTTP_REFERER']) && $_SERVER['HTTP_REFERER'] == $allowed_referer) {
-    // The request appears to be related to loading the login page because the
-    // Referer header is set to our server.  This could be other assets for
-    // rendering the login page (images, JS, CSS), so forward the request.
-    forward_request();
-    $action = "pass_related";
+//} elseif (isset($_SERVER['HTTP_REFERER']) && $_SERVER['HTTP_REFERER'] == $allowed_referer) {
+//    // The request appears to be related to loading the login page because the
+//    // Referer header is set to our server.  This could be other assets for
+//    // rendering the login page (images, JS, CSS), so forward the request.
+//    forward_request();
+//    $action = "pass_related";
 } elseif (is_authenticated()) {
     // For any other request (e.g. captive.apple.com), if the auth_url returned
     // true, then we allow the device, forward the request, and return its
@@ -300,6 +300,6 @@ if ($_SERVER['HTTP_HOST'] == $login_host) {
  */
 $method = $_SERVER['REQUEST_METHOD'];
 $code = http_response_code();
-error_log("$action: $method $original_url $code");
+error_log("$action: $mac $method $original_url $code");
 
 ?>
