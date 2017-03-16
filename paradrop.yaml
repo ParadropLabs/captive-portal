@@ -1,0 +1,8 @@
+version: 1
+type: light
+use: python2
+command: python -u captive.py
+as_root: true
+packages:
+  - conntrack
+  - iptables

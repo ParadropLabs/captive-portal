@@ -1,0 +1,12 @@
+<html xmlns:t="http://twistedmatrix.com/ns/twisted.web.template/0.1">
+    <body>
+        <h2>Clients</h2>
+        <div>
+            <table t:render="clients">
+                <tr>
+                    <td><t:slot name="mac" /></td>
+                </tr>
+            </table>
+        </div>
+    </body>
+</html>
