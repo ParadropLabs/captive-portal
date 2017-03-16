@@ -125,7 +125,7 @@ def initialize_iptables():
     mark = rule.create_match("mark")
     mark.mark = "99"
     rule.target = iptc.Target(rule, "REDIRECT")
-    rule.target.to_port = str(CAPTIVE_PORT)
+    rule.target.to_ports = str(CAPTIVE_PORT)
     nat_prerouting.append_rule(rule)
 
     # Masquerade outgoing traffic.
