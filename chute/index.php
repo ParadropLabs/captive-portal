@@ -30,6 +30,9 @@ $original_url = (isset($_SERVER['HTTPS']) ? 'https://' : 'http://') . $_SERVER['
 // Client's MAC address.
 $mac = find_mac();
 
+// Whether we should redirect to $login_url or to the local server.
+$redirect_local = FALSE;
+
 /*
  * Find the client's MAC address.
  */
@@ -91,7 +94,24 @@ function is_authenticated() {
 
     curl_close($curl);
 
-    return ($result === '1');
+    // Version 1.12 returns simple strings '1' or '0'.
+    if ($result === '1') {
+        return TRUE;
+    } elseif ($result === '0') {
+        return FALSE;
+    }
+
+    // Version 1.2 returns JSON with integer auth values.
+    // Example: '[{"auth":1,"email":""}]'
+    $data = json_decode($result);
+    if ($data[0]->auth === 1) {
+        return TRUE;
+    } elseif ($data[0]->auth === 0) {
+        return FALSE;
+    }
+
+    // Default: be kind to users?
+    return TRUE;
 }
 
 /*
@@ -270,12 +290,16 @@ if ($_SERVER['HTTP_HOST'] == $login_host) {
         post_initial_login();
         $action = "show_login";
     }
-//} elseif (isset($_SERVER['HTTP_REFERER']) && $_SERVER['HTTP_REFERER'] == $allowed_referer) {
-//    // The request appears to be related to loading the login page because the
-//    // Referer header is set to our server.  This could be other assets for
-//    // rendering the login page (images, JS, CSS), so forward the request.
-//    forward_request();
-//    $action = "pass_related";
+} elseif (isset($_SERVER['HTTP_REFERER']) && $_SERVER['HTTP_REFERER'] == $allowed_referer) {
+    // The request appears to be related to loading the login page because the
+    // Referer header is set to our server.  This could be other assets for
+    // rendering the login page (images, JS, CSS), so forward the request.
+    //
+    // This code probably doesn't do anything when $redirect_local is FALSE,
+    // because the client should be making HTTPS connections to outside.  It
+    // might work when $redirect_local is TRUE.
+    forward_request();
+    $action = "pass_related";
 } elseif (is_authenticated()) {
     // For any other request (e.g. captive.apple.com), if the auth_url returned
     // true, then we allow the device, forward the request, and return its
@@ -287,12 +311,14 @@ if ($_SERVER['HTTP_HOST'] == $login_host) {
     // For any other request, if the device should not be allowed, then return
     // a redirect (302 Found) to our server and have the client load the login
     // page.
-//    send_redirect("http://$login_host");
-
-    $url = "$login_url/?mac=$mac";
-    send_redirect($url);
-
-    $action = "redirect";
+    if ($redirect_local) {
+        send_redirect("http://$login_host");
+        $action = "redirect_local";
+    } else {
+        $url = "$login_url/?mac=$mac";
+        send_redirect($url);
+        $action = "redirect_remote";
+    }
 }
 
 /*

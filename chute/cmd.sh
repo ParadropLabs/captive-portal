@@ -46,7 +46,7 @@ iptables -A FORWARD -i eth0 -o wlan0 -m state --state ESTABLISHED,RELATED -j ACC
 # Some sites load content over UDP port 443 (might be QUIC, google.com/finance
 # seems to do tihs), so webpage can still load unless we block UDP.
 iptables -A FORWARD -i wlan0 -o eth0 -p udp --dport 53 -j ACCEPT
-iptables -A FORWARD -i wlan0 -o eth0 -m mark --mark 99 -j DROP
+iptables -A FORWARD -i wlan0 -o eth0 -m mark --mark 99 -j REJECT
 
 iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
 
