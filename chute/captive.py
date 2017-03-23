@@ -10,10 +10,12 @@ import pyrad
 import pyrad.client
 import pyrad.dictionary
 import pyrad.packet
+import requests
 
 
 ROUTER_ID = os.environ.get("PARADROP_ROUTER_ID", "000000000000000000000000")
 SYSTEM_DIR = os.environ.get("PARADROP_SYSTEM_DIR", "/tmp")
+BASE_URL = os.environ.get("PARADROP_BASE_URL", None)
 
 RADIUS_SERVER = os.environ.get("CP_RADIUS_SERVER", None)
 RADIUS_SECRET = os.environ.get("CP_RADIUS_SECRET", None)
@@ -24,6 +26,7 @@ RADIUS_NAS_ID = os.environ.get("CP_RADIUS_NAS_ID", ROUTER_ID)
 
 LEASES_FILE = os.path.join(SYSTEM_DIR, "dnsmasq-wifi.leases")
 LEASES_FILE_FIELDS = ["expiration", "mac", "ip", "name", "devid"]
+INTERIM_UPDATE_INTERVAL = 60
 
 
 def readLeasesFile():
@@ -65,6 +68,12 @@ class ClientTracker(object):
         self.next_session_id = 0
         self.timer = IntervalTimer(5, self.refresh)
 
+        self.shared_fields = {
+            'NAS-Identifier': RADIUS_NAS_ID,
+            'NAS-Port-Type': "Wireless-802.11",
+            'Called-Station-Id': ROUTER_ID
+        }
+
     def refresh(self):
         new_macs = set()
         old_macs = set(self.clients.keys())
@@ -80,12 +89,19 @@ class ClientTracker(object):
             self.onDisconnect(self.clients[mac])
             del self.clients[mac]
 
+        # Only do interim updates if we can get stats from paradrop daemon.
+        if BASE_URL is not None:
+            now = time.time()
+            for client in self.clients.values():
+                if client['next-update'] > now:
+                    self.update(client)
+
     def start(self):
         request = self.radclient.CreateAcctPacket()
-        request['NAS-Identifier'] = RADIUS_NAS_ID
-        request['NAS-Port-Type'] = "Wireless-802.11"
-        request['Called-Station-Id'] = ROUTER_ID
+        for k, v in self.shared_fields.iteritems():
+            request[k] = v
         request['Acct-Status-Type'] = "Accounting-On"
+
         reply = self.radclient.SendPacket(request)
         print("reply code: {}".format(reply.code))
         if reply.code == pyrad.packet.AccountingResponse:
@@ -104,11 +120,11 @@ class ClientTracker(object):
             self.onDisconnect(client, "NAS-Reboot")
 
         request = self.radclient.CreateAcctPacket()
-        request['NAS-Identifier'] = RADIUS_NAS_ID
-        request['NAS-Port-Type'] = "Wireless-802.11"
-        request['Called-Station-Id'] = ROUTER_ID
+        for k, v in self.shared_fields.iteritems():
+            request[k] = v
         request['Acct-Status-Type'] = "Accounting-Off"
         request['Acct-Terminate-Cause'] = "NAS-Reboot"
+
         reply = self.radclient.SendPacket(request)
         print("reply code: {}".format(reply.code))
         if reply.code == pyrad.packet.AccountingResponse:
@@ -118,9 +134,36 @@ class ClientTracker(object):
         for k in reply.keys():
             print("{}: {}".format(k, reply[k]))
 
+    def update(self, client):
+        url = "{}/networks/wifi/stations/{}".format(BASE_URL, client['mac'])
+        request = requests.get(url)
+        stats = request.json()
+
+        request = self.radclient.CreateAcctPacket()
+        for k, v in self.shared_fields.iteritems():
+            request[k] = v
+
+        request['Acct-Status-Type'] = "Interim-Update"
+        request['Acct-Input-Packets'] = stats['rx_packets']
+        request['Acct-Output-Packets'] = stats['tx_packets']
+        request['Acct-Input-Octets'] = stats['rx_bytes']
+        request['Acct-Output-Octets'] = stats['tx_bytes']
+
+        reply = self.radclient.SendPacket(request)
+        print("reply code: {}".format(reply.code))
+        if reply.code == pyrad.packet.AccountingResponse:
+            print("accepted")
+        else:
+            print("denied")
+        for k in reply.keys():
+            print("{}: {}".format(k, reply[k]))
+
+        client['stats'] = stats
+        client['next-update'] = time.time() + INTERIM_UPDATE_INTERVAL
+
     def onConnect(self, client):
         client['start'] = int(time.time())
-
+        client['next-update'] = client['start'] + INTERIM_UPDATE_INTERVAL
         client['session'] = "{:08x}".format(self.next_session_id)
         self.next_session_id += 1
 
@@ -143,9 +186,9 @@ class ClientTracker(object):
 
         request = self.radclient.CreateAcctPacket(
             User_Name=RADIUS_USERNAME)
-        request['NAS-Identifier'] = RADIUS_NAS_ID
-        request['NAS-Port-Type'] = "Wireless-802.11"
-        request['Called-Station-Id'] = ROUTER_ID
+        for k, v in self.shared_fields.iteritems():
+            request[k] = v
+
         request['Calling-Station-Id'] = mac_dashed
         request['Acct-Status-Type'] = "Start"
         request['Acct-Session-Id'] = client['session']
@@ -167,14 +210,20 @@ class ClientTracker(object):
 
         request = self.radclient.CreateAcctPacket(
             User_Name=RADIUS_USERNAME)
-        request['NAS-Identifier'] = RADIUS_NAS_ID
-        request['NAS-Port-Type'] = "Wireless-802.11"
-        request['Called-Station-Id'] = ROUTER_ID
+        for k, v in self.shared_fields.iteritems():
+            request[k] = v
         request['Calling-Station-Id'] = mac_dashed
         request['Acct-Status-Type'] = "Stop"
         request['Acct-Terminate-Cause'] = cause
         request['Acct-Session-Id'] = client['session']
         request['Acct-Session-Time'] = client['stop'] - client['start']
+
+        stats = client.get('stats', None)
+        if stats is not None:
+            request['Acct-Input-Packets'] = stats['rx_packets']
+            request['Acct-Output-Packets'] = stats['tx_packets']
+            request['Acct-Input-Octets'] = stats['rx_bytes']
+            request['Acct-Output-Octets'] = stats['tx_bytes']
 
         reply = self.radclient.SendPacket(request)
         print("reply code: {}".format(reply.code))
