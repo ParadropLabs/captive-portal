@@ -70,16 +70,4 @@ fi
 
 /etc/init.d/apache2 restart
 
-while true; do
-    sleep 1m
-
-    now=$(date +%s)
-    iptables -t mangle -L clients | grep -E "expires [0-9]+" | while read line; do
-        mac=$(echo "$line" | grep -oP "(?<=MAC )..:..:..:..:..:..")
-        expires=$(echo "$line" | grep -oP "(?<=expires )\d+")
-
-        if [ "$now" -gt "$expires" ]; then
-            iptables -t mangle -D clients -m mac --mac-source $mac -m comment --comment "expires $expires" -j RETURN
-        fi
-    done
-done
+python captive.py
