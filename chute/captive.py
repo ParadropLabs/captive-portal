@@ -36,12 +36,34 @@ def readLeasesFile():
             yield dict(zip(LEASES_FILE_FIELDS, parts))
 
 
+class IntervalTimer(threading.Thread):
+    def __init__(self, interval, function, *args, **kwargs):
+        super(IntervalTimer, self).__init__()
+        self.interval = interval
+        self.function = function
+        self.args = args
+        self.kwargs = kwargs
+        self.finished = threading.Event()
+        self.running = True
+
+    def cancel(self):
+        self.finished.set()
+
+    def run(self):
+        while True:
+            self.finished.wait(self.interval)
+            if self.finished.is_set():
+                break
+            else:
+                self.function(*self.args, **self.kwargs)
+
+
 class ClientTracker(object):
     def __init__(self, radclient):
         self.clients = dict()
         self.radclient = radclient
         self.next_session_id = 0
-        self.timer = threading.Timer(5, self.refresh)
+        self.timer = IntervalTimer(5, self.refresh)
 
     def refresh(self):
         new_macs = set()
@@ -97,6 +119,8 @@ class ClientTracker(object):
             print("{}: {}".format(k, reply[k]))
 
     def onConnect(self, client):
+        client['start'] = int(time.time())
+
         client['session'] = "{:08x}".format(self.next_session_id)
         self.next_session_id += 1
 
@@ -136,6 +160,8 @@ class ClientTracker(object):
             print("{}: {}".format(k, reply[k]))
 
     def onDisconnect(self, client, cause="User-Request"):
+        client['stop'] = int(time.time())
+
         mac_upper = client['mac'].upper()
         mac_dashed = mac_upper.replace(':', '-')
 
@@ -148,6 +174,7 @@ class ClientTracker(object):
         request['Acct-Status-Type'] = "Stop"
         request['Acct-Terminate-Cause'] = cause
         request['Acct-Session-Id'] = client['session']
+        request['Acct-Session-Time'] = client['stop'] - client['start']
 
         reply = self.radclient.SendPacket(request)
         print("reply code: {}".format(reply.code))
