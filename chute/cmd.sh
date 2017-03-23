@@ -19,7 +19,7 @@ iptables -t filter -A INPUT -p icmp --icmp-type 8  -j ACCEPT
 # Allow traffic to specified addresses, e.g. the login page.
 iptables -t mangle -A PREROUTING -d 173.229.3.10 -j ACCEPT
 iptables -t mangle -A PREROUTING -d 173.229.3.20 -j ACCEPT
-for $domain in $CP_ALLOW_DOMAIN; do
+for domain in $CP_ALLOW_DOMAIN; do
     iptables -t mangle -A PREROUTING -d "$domain" -j ACCEPT
 done
 

@@ -15,11 +15,11 @@ import pyrad.packet
 ROUTER_ID = os.environ.get("PARADROP_ROUTER_ID", "000000000000000000000000")
 DATA_DIR = os.environ.get("PARADROP_DATA_DIR", "/tmp")
 
-RADIUS_SERVER = os.environ.get("CP_RADIUS_SERVER", "localhost")
-RADIUS_SECRET = os.environ.get("CP_RADIUS_SECRET", "super-secret")
-RADIUS_USERNAME = os.environ.get("CP_RADIUS_USERNAME", "lance")
-RADIUS_PASSWORD = os.environ.get("CP_RADIUS_PASSWORD", "password")
-RADIUS_NAS_ID = os.environ.get("CP_RADIUS_NAS_ID", "localhost")
+RADIUS_SERVER = os.environ.get("CP_RADIUS_SERVER", None)
+RADIUS_SECRET = os.environ.get("CP_RADIUS_SECRET", None)
+RADIUS_USERNAME = os.environ.get("CP_RADIUS_USERNAME", None)
+RADIUS_PASSWORD = os.environ.get("CP_RADIUS_PASSWORD", None)
+RADIUS_NAS_ID = os.environ.get("CP_RADIUS_NAS_ID", ROUTER_ID)
 
 
 LEASES_FILE = os.path.join(DATA_DIR, "dnsmasq-wifi.leases")
@@ -33,8 +33,7 @@ def readLeasesFile():
     with open(LEASES_FILE, "r") as source:
         for line in source:
             parts = line.split()
-            client = dict(zip(LEASES_FILE_FIELDS, parts))
-            yield client
+            yield dict(zip(LEASES_FILE_FIELDS, parts))
 
 
 class ClientTracker(object):
@@ -42,6 +41,7 @@ class ClientTracker(object):
         self.clients = dict()
         self.radclient = radclient
         self.next_session_id = 0
+        self.timer = threading.Timer(5, self.refresh)
 
     def refresh(self):
         for client in readLeasesFile():
@@ -50,6 +50,41 @@ class ClientTracker(object):
             if mac not in self.clients:
                 self.onConnect(client)
                 self.clients[mac] = client
+
+    def start(self):
+        request = self.radclient.CreateAcctPacket()
+        request['NAS-Identifier'] = RADIUS_NAS_ID
+        request['NAS-Port-Type'] = "Wireless-802.11"
+        request['Called-Station-Id'] = ROUTER_ID
+        request['Acct-Status-Type'] = "Accounting-On"
+        reply = self.radclient.SendPacket(request)
+        print("reply code: {}".format(reply.code))
+        if reply.code == pyrad.packet.AccountingResponse:
+            print("accepted")
+        else:
+            print("denied")
+        for k in reply.keys():
+            print("{}: {}".format(k, reply[k]))
+
+        self.timer.start()
+
+    def stop(self):
+        self.timer.cancel()
+
+        request = self.radclient.CreateAcctPacket()
+        request['NAS-Identifier'] = RADIUS_NAS_ID
+        request['NAS-Port-Type'] = "Wireless-802.11"
+        request['Called-Station-Id'] = ROUTER_ID
+        request['Acct-Status-Type'] = "Accounting-Off"
+        request['Acct-Terminate-Cause'] = "NAS-Reboot"
+        reply = self.radclient.SendPacket(request)
+        print("reply code: {}".format(reply.code))
+        if reply.code == pyrad.packet.AccountingResponse:
+            print("accepted")
+        else:
+            print("denied")
+        for k in reply.keys():
+            print("{}: {}".format(k, reply[k]))
 
     def onConnect(self, client):
         client['session'] = "{:08x}".format(self.next_session_id)
@@ -117,20 +152,21 @@ def cleanIptables():
 
 
 if __name__ == "__main__":
-    client = pyrad.client.Client(server=RADIUS_SERVER, secret=RADIUS_SECRET,
-             dict=pyrad.dictionary.Dictionary("radius-defs"))
-
-    tracker = ClientTracker(client)
-
-    timers = []
-    timers.append(threading.Timer(5.0, tracker.refresh))
-    timers.append(threading.Timer(60.0, cleanIptables))
-    for t in timers:
-        t.start()
+    # If RADIUS_SERVER is defined, then set up the client tracker for
+    # authentication and accounting.
+    if RADIUS_SERVER is not None:
+        client = pyrad.client.Client(server=RADIUS_SERVER,
+                secret=RADIUS_SECRET,
+                dict=pyrad.dictionary.Dictionary("radius-defs"))
+        tracker = ClientTracker(client)
+        tracker.start()
 
     try:
         while True:
             time.sleep(60)
+            cleanIptables()
     except KeyboardInterrupt:
-        for t in timers:
-            t.cancel()
+        pass
+
+    if RADIUS_SERVER is not None:
+        tracker.stop()
