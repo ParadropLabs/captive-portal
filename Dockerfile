@@ -28,6 +28,11 @@ ADD chute/captive.py /opt/captive-portal/
 ADD chute/radius-defs /opt/captive-portal/
 ADD chute/requirements.txt /opt/captive-portal/
 
+RUN echo "www-data ALL = NOPASSWD: /sbin/iptables *" >> /etc/sudoers.d/www-data
+RUN echo "www-data ALL = NOPASSWD: /usr/bin/rmtrack [0-9]*.[0-9]*.[0-9]*.[0-9]*" >> /etc/sudoers.d/www-data
+
+RUN echo "nameserver 127.0.0.1" > /etc/resolvconf/resolv.conf.d/base
+
 RUN pip install -r /opt/captive-portal/requirements.txt
 
 # Set up permissions.
