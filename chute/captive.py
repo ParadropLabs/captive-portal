@@ -93,8 +93,14 @@ class ClientTracker(object):
         if BASE_URL is not None:
             now = time.time()
             for client in self.clients.values():
-                if client['next-update'] > now:
-                    self.update(client)
+                if now > client['next-update']:
+                    try:
+                        self.update(client)
+                        client['next-update'] = now + INTERIM_UPDATE_INTERVAL
+                    except:
+                        # We get an exception if the client has disassociated.
+                        self.onDisconnect(client)
+                        del self.clients[client['mac']]
 
     def start(self):
         request = self.radclient.CreateAcctPacket()
@@ -159,7 +165,6 @@ class ClientTracker(object):
             print("{}: {}".format(k, reply[k]))
 
         client['stats'] = stats
-        client['next-update'] = time.time() + INTERIM_UPDATE_INTERVAL
 
     def onConnect(self, client):
         client['start'] = int(time.time())
