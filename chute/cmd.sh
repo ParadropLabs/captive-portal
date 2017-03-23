@@ -70,4 +70,4 @@ fi
 
 /etc/init.d/apache2 restart
 
-python captive.py
+python -u captive.py
