@@ -44,12 +44,19 @@ class ClientTracker(object):
         self.timer = threading.Timer(5, self.refresh)
 
     def refresh(self):
+        new_macs = set()
+        old_macs = set(self.clients.keys())
+
         for client in readLeasesFile():
             mac = client['mac']
-            print(mac)
             if mac not in self.clients:
                 self.onConnect(client)
                 self.clients[mac] = client
+            new_macs.add(mac)
+
+        for mac in (old_macs - new_macs):
+            self.onDisconnect(self.clients[mac])
+            del self.clients[mac]
 
     def start(self):
         request = self.radclient.CreateAcctPacket()
@@ -70,6 +77,9 @@ class ClientTracker(object):
 
     def stop(self):
         self.timer.cancel()
+
+        for client in self.clients.values():
+            self.onDisconnect(client, "NAS-Reboot")
 
         request = self.radclient.CreateAcctPacket()
         request['NAS-Identifier'] = RADIUS_NAS_ID
@@ -114,6 +124,29 @@ class ClientTracker(object):
         request['Called-Station-Id'] = ROUTER_ID
         request['Calling-Station-Id'] = mac_dashed
         request['Acct-Status-Type'] = "Start"
+        request['Acct-Session-Id'] = client['session']
+
+        reply = self.radclient.SendPacket(request)
+        print("reply code: {}".format(reply.code))
+        if reply.code == pyrad.packet.AccountingResponse:
+            print("accepted")
+        else:
+            print("denied")
+        for k in reply.keys():
+            print("{}: {}".format(k, reply[k]))
+
+    def onDisconnect(self, client, cause="User-Request"):
+        mac_upper = client['mac'].upper()
+        mac_dashed = mac_upper.replace(':', '-')
+
+        request = self.radclient.CreateAcctPacket(
+            User_Name=RADIUS_USERNAME)
+        request['NAS-Identifier'] = RADIUS_NAS_ID
+        request['NAS-Port-Type'] = "Wireless-802.11"
+        request['Called-Station-Id'] = ROUTER_ID
+        request['Calling-Station-Id'] = mac_dashed
+        request['Acct-Status-Type'] = "Stop"
+        request['Acct-Terminate-Cause'] = cause
         request['Acct-Session-Id'] = client['session']
 
         reply = self.radclient.SendPacket(request)
