@@ -13,7 +13,7 @@ import pyrad.packet
 
 
 ROUTER_ID = os.environ.get("PARADROP_ROUTER_ID", "000000000000000000000000")
-DATA_DIR = os.environ.get("PARADROP_DATA_DIR", "/tmp")
+SYSTEM_DIR = os.environ.get("PARADROP_SYSTEM_DIR", "/tmp")
 
 RADIUS_SERVER = os.environ.get("CP_RADIUS_SERVER", None)
 RADIUS_SECRET = os.environ.get("CP_RADIUS_SECRET", None)
@@ -22,7 +22,7 @@ RADIUS_PASSWORD = os.environ.get("CP_RADIUS_PASSWORD", None)
 RADIUS_NAS_ID = os.environ.get("CP_RADIUS_NAS_ID", ROUTER_ID)
 
 
-LEASES_FILE = os.path.join(DATA_DIR, "dnsmasq-wifi.leases")
+LEASES_FILE = os.path.join(SYSTEM_DIR, "dnsmasq-wifi.leases")
 LEASES_FILE_FIELDS = ["expiration", "mac", "ip", "name", "devid"]
 
 
