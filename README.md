@@ -16,7 +16,30 @@ Environment Variables
 * CP\_LANDING\_URL: URL to redirect users after they are logged in.
 * CP\_LOCATION: Location associated with the chute instance.
 * CP\_EXPIRATION: Expiration time (seconds) for client sessions.
-* CP\_ALLOW\_DOMAIN: Special destination domain(s) to allow unrestricted.  This should be a space separated list of domains, e.g. "example.com example.org".
+* CP\_ALLOW\_DOMAIN: Special destination domain(s) to allow unrestricted.
+  This should be a space separated list of domains, e.g. "example.com
+  example.org".
+
+The following variables pertain to RADIUS authentication and accounting.
+
+* CP\_RADIUS\_SERVER: RADIUS server address.
+* CP\_RADIUS\_SECRET: RADIUS server secret.
+* CP\_RADIUS\_USERNAME: Username for RADIUS authentication.
+* CP\_RADIUS\_PASSWORD: Password for RADIUS authentication.
+* CP\_RADIUS\_NAS\_ID: NAS Identifier for RADIUS.
+
+If CP\_RADIUS\_SERVER is defined, RADIUS support will be enabled, and
+all of these variables are expected to be set appropriately.
+
+Current limitations:
+
+* The code expects authentication and accounting to use the same server
+  address and secret at the default ports, 1812 and 1813.
+* All user sessions will be attributed to the same username and password.
+  They can be distinguished by Calling-Station-Id (determined by MAC
+  address) and Acct-Session-Id (determined by a counter that resets to
+  zero at startup).
+
 
 Login Flow
 ----------
