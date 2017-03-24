@@ -88,6 +88,13 @@ class ClientTracker(object):
         }
 
     def refresh(self):
+        """
+        Refresh the current list of clients.
+
+        Fetch a new list of connected clients and compare to the the old list
+        to determine which clients are new and which have disconnected.  Then
+        send the appropriate messages to the RADIUS server.
+        """
         new_macs = set()
         old_macs = set(self.clients.keys())
 
@@ -114,6 +121,12 @@ class ClientTracker(object):
                     client['next-update'] = now + INTERIM_UPDATE_INTERVAL
 
     def start(self):
+        """
+        Start accounting.
+
+        Send an Accounting-On message to the RADIUS server and start the
+        IntervalTimer to periodically call the refresh function.
+        """
         request = self.radclient.CreateAcctPacket()
         for k, v in self.shared_fields.iteritems():
             request[k] = v
@@ -131,6 +144,12 @@ class ClientTracker(object):
         self.timer.start()
 
     def stop(self):
+        """
+        Stop accounting.
+
+        Send an Accounting-Off message to the RADIUS server and cancel the
+        IntervalTimer that calls the refresh function.
+        """
         self.timer.cancel()
 
         for client in self.clients.values():
@@ -152,6 +171,9 @@ class ClientTracker(object):
             print("{}: {}".format(k, reply[k]))
 
     def update(self, client):
+        """
+        Send an accounting update message for a client.
+        """
         request = self.radclient.CreateAcctPacket()
         for k, v in self.shared_fields.iteritems():
             request[k] = v
@@ -249,14 +271,15 @@ def cleanIptables():
     cmd = ["iptables", "-t", "mangle", "-L", "clients"]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
     for line in proc.stdout:
-        match = pattern.match(line)
+        match = pattern.search(line)
         if match is None:
             continue
 
         mac = match.group(1)
         expires = int(match.group(2))
 
-        if expires >= now:
+        if now >= expires:
+            print("Rule expiration: {}".format(mac))
             expired.append((mac, expires))
 
     for mac, expires in expired:
