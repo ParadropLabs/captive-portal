@@ -25,11 +25,24 @@ RADIUS_NAS_ID = os.environ.get("CP_RADIUS_NAS_ID", ROUTER_ID)
 
 
 LEASES_FILE = os.path.join(SYSTEM_DIR, "dnsmasq-wifi.leases")
-LEASES_FILE_FIELDS = ["expiration", "mac", "ip", "name", "devid"]
+LEASES_FILE_FIELDS = ["expiration", "mac_addr", "ip_addr", "name", "devid"]
+
+CLIENT_UPDATE_INTERVAL = 5
 INTERIM_UPDATE_INTERVAL = 60
+IPTABLES_CLEAN_INTERVAL = 60
 
 
-def readLeasesFile():
+def readClients():
+    # If BASE_URL is None, we are running on a version of ParaDrop that does
+    # not support this API, so fall back to using the leases file.
+    if BASE_URL is not None:
+        url = "{}/networks/wifi/stations".format(BASE_URL)
+        request = requests.get(url)
+        results = request.json()
+        for client in results:
+            yield client
+        return
+
     if not os.path.exists(LEASES_FILE):
         return
 
@@ -66,7 +79,7 @@ class ClientTracker(object):
         self.clients = dict()
         self.radclient = radclient
         self.next_session_id = 0
-        self.timer = IntervalTimer(5, self.refresh)
+        self.timer = IntervalTimer(CLIENT_UPDATE_INTERVAL, self.refresh)
 
         self.shared_fields = {
             'NAS-Identifier': RADIUS_NAS_ID,
@@ -78,9 +91,11 @@ class ClientTracker(object):
         new_macs = set()
         old_macs = set(self.clients.keys())
 
-        for client in readLeasesFile():
-            mac = client['mac']
-            if mac not in self.clients:
+        for client in readClients():
+            mac = client['mac_addr']
+            if mac in self.clients:
+                self.clients[mac].update(client)
+            else:
                 self.onConnect(client)
                 self.clients[mac] = client
             new_macs.add(mac)
@@ -90,17 +105,13 @@ class ClientTracker(object):
             del self.clients[mac]
 
         # Only do interim updates if we can get stats from paradrop daemon.
+        # Otherwise, all of the byte and packet counts are missing.
         if BASE_URL is not None:
             now = time.time()
             for client in self.clients.values():
                 if now > client['next-update']:
-                    try:
-                        self.update(client)
-                        client['next-update'] = now + INTERIM_UPDATE_INTERVAL
-                    except:
-                        # We get an exception if the client has disassociated.
-                        self.onDisconnect(client)
-                        del self.clients[client['mac']]
+                    self.update(client)
+                    client['next-update'] = now + INTERIM_UPDATE_INTERVAL
 
     def start(self):
         request = self.radclient.CreateAcctPacket()
@@ -141,19 +152,17 @@ class ClientTracker(object):
             print("{}: {}".format(k, reply[k]))
 
     def update(self, client):
-        url = "{}/networks/wifi/stations/{}".format(BASE_URL, client['mac'])
-        request = requests.get(url)
-        stats = request.json()
-
         request = self.radclient.CreateAcctPacket()
         for k, v in self.shared_fields.iteritems():
             request[k] = v
 
+        request['Acct-Input-Octets'] = client['rx_bytes']
+        request['Acct-Input-Packets'] = client['rx_packets']
+        request['Acct-Output-Octets'] = client['tx_bytes']
+        request['Acct-Output-Packets'] = client['tx_packets']
+        request['Acct-Session-Id'] = client['session-id']
         request['Acct-Status-Type'] = "Interim-Update"
-        request['Acct-Input-Packets'] = stats['rx_packets']
-        request['Acct-Output-Packets'] = stats['tx_packets']
-        request['Acct-Input-Octets'] = stats['rx_bytes']
-        request['Acct-Output-Octets'] = stats['tx_bytes']
+        request['Calling-Station-Id'] = client['station-id']
 
         reply = self.radclient.SendPacket(request)
         print("reply code: {}".format(reply.code))
@@ -164,12 +173,11 @@ class ClientTracker(object):
         for k in reply.keys():
             print("{}: {}".format(k, reply[k]))
 
-        client['stats'] = stats
-
     def onConnect(self, client):
         client['start'] = int(time.time())
         client['next-update'] = client['start'] + INTERIM_UPDATE_INTERVAL
-        client['session'] = "{:08x}".format(self.next_session_id)
+        client['session-id'] = "{:08x}".format(self.next_session_id)
+        client['station-id'] = client['mac_addr'].upper().replace(':', '-')
         self.next_session_id += 1
 
         request = self.radclient.CreateAuthPacket(
@@ -186,17 +194,14 @@ class ClientTracker(object):
         for k in reply.keys():
             print("{}: {}".format(k, reply[k]))
 
-        mac_upper = client['mac'].upper()
-        mac_dashed = mac_upper.replace(':', '-')
-
         request = self.radclient.CreateAcctPacket(
             User_Name=RADIUS_USERNAME)
         for k, v in self.shared_fields.iteritems():
             request[k] = v
 
-        request['Calling-Station-Id'] = mac_dashed
+        request['Acct-Session-Id'] = client['session-id']
         request['Acct-Status-Type'] = "Start"
-        request['Acct-Session-Id'] = client['session']
+        request['Calling-Station-Id'] = client['station-id']
 
         reply = self.radclient.SendPacket(request)
         print("reply code: {}".format(reply.code))
@@ -210,25 +215,21 @@ class ClientTracker(object):
     def onDisconnect(self, client, cause="User-Request"):
         client['stop'] = int(time.time())
 
-        mac_upper = client['mac'].upper()
-        mac_dashed = mac_upper.replace(':', '-')
-
         request = self.radclient.CreateAcctPacket(
             User_Name=RADIUS_USERNAME)
         for k, v in self.shared_fields.iteritems():
             request[k] = v
-        request['Calling-Station-Id'] = mac_dashed
+        request['Acct-Session-Id'] = client['session-id']
+        request['Acct-Session-Time'] = client['stop'] - client['start']
         request['Acct-Status-Type'] = "Stop"
         request['Acct-Terminate-Cause'] = cause
-        request['Acct-Session-Id'] = client['session']
-        request['Acct-Session-Time'] = client['stop'] - client['start']
+        request['Calling-Station-Id'] = client['station-id']
 
-        stats = client.get('stats', None)
-        if stats is not None:
-            request['Acct-Input-Packets'] = stats['rx_packets']
-            request['Acct-Output-Packets'] = stats['tx_packets']
-            request['Acct-Input-Octets'] = stats['rx_bytes']
-            request['Acct-Output-Octets'] = stats['tx_bytes']
+        if BASE_URL is not None:
+            request['Acct-Input-Octets'] = client.get('rx_bytes', 0)
+            request['Acct-Input-Packets'] = client.get('rx_packets', 0)
+            request['Acct-Output-Octets'] = client.get('tx_bytes', 0)
+            request['Acct-Output-Packets'] = client.get('tx_packets', 0)
 
         reply = self.radclient.SendPacket(request)
         print("reply code: {}".format(reply.code))
@@ -277,7 +278,7 @@ if __name__ == "__main__":
 
     try:
         while True:
-            time.sleep(60)
+            time.sleep(IPTABLES_CLEAN_INTERVAL)
             cleanIptables()
     except KeyboardInterrupt:
         pass
