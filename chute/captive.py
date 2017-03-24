@@ -82,9 +82,9 @@ class ClientTracker(object):
         self.timer = IntervalTimer(CLIENT_UPDATE_INTERVAL, self.refresh)
 
         self.shared_fields = {
+            'Called-Station-Id': ROUTER_ID,
             'NAS-Identifier': RADIUS_NAS_ID,
-            'NAS-Port-Type': "Wireless-802.11",
-            'Called-Station-Id': ROUTER_ID
+            'NAS-Port-Type': "Wireless-802.11"
         }
 
     def refresh(self):
@@ -164,6 +164,7 @@ class ClientTracker(object):
         request['Acct-Session-Time'] = int(time.time()) - client['start']
         request['Acct-Status-Type'] = "Interim-Update"
         request['Calling-Station-Id'] = client['station-id']
+        request['User-Name'] = RADIUS_USERNAME
 
         reply = self.radclient.SendPacket(request)
         print("reply code: {}".format(reply.code))
@@ -195,14 +196,14 @@ class ClientTracker(object):
         for k in reply.keys():
             print("{}: {}".format(k, reply[k]))
 
-        request = self.radclient.CreateAcctPacket(
-            User_Name=RADIUS_USERNAME)
+        request = self.radclient.CreateAcctPacket()
         for k, v in self.shared_fields.iteritems():
             request[k] = v
 
         request['Acct-Session-Id'] = client['session-id']
         request['Acct-Status-Type'] = "Start"
         request['Calling-Station-Id'] = client['station-id']
+        request['User-Name'] = RADIUS_USERNAME
 
         reply = self.radclient.SendPacket(request)
         print("reply code: {}".format(reply.code))
@@ -214,8 +215,7 @@ class ClientTracker(object):
             print("{}: {}".format(k, reply[k]))
 
     def onDisconnect(self, client, cause="User-Request"):
-        request = self.radclient.CreateAcctPacket(
-            User_Name=RADIUS_USERNAME)
+        request = self.radclient.CreateAcctPacket()
         for k, v in self.shared_fields.iteritems():
             request[k] = v
         request['Acct-Session-Id'] = client['session-id']
@@ -223,6 +223,7 @@ class ClientTracker(object):
         request['Acct-Status-Type'] = "Stop"
         request['Acct-Terminate-Cause'] = cause
         request['Calling-Station-Id'] = client['station-id']
+        request['User-Name'] = RADIUS_USERNAME
 
         if BASE_URL is not None:
             request['Acct-Input-Octets'] = client.get('rx_bytes', 0)
