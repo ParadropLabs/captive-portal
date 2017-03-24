@@ -161,6 +161,7 @@ class ClientTracker(object):
         request['Acct-Output-Octets'] = client['tx_bytes']
         request['Acct-Output-Packets'] = client['tx_packets']
         request['Acct-Session-Id'] = client['session-id']
+        request['Acct-Session-Time'] = int(time.time()) - client['start']
         request['Acct-Status-Type'] = "Interim-Update"
         request['Calling-Station-Id'] = client['station-id']
 
@@ -213,14 +214,12 @@ class ClientTracker(object):
             print("{}: {}".format(k, reply[k]))
 
     def onDisconnect(self, client, cause="User-Request"):
-        client['stop'] = int(time.time())
-
         request = self.radclient.CreateAcctPacket(
             User_Name=RADIUS_USERNAME)
         for k, v in self.shared_fields.iteritems():
             request[k] = v
         request['Acct-Session-Id'] = client['session-id']
-        request['Acct-Session-Time'] = client['stop'] - client['start']
+        request['Acct-Session-Time'] = int(time.time()) - client['start']
         request['Acct-Status-Type'] = "Stop"
         request['Acct-Terminate-Cause'] = cause
         request['Calling-Station-Id'] = client['station-id']
