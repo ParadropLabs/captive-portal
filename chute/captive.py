@@ -16,6 +16,7 @@ import requests
 ROUTER_ID = os.environ.get("PARADROP_ROUTER_ID", "000000000000000000000000")
 SYSTEM_DIR = os.environ.get("PARADROP_SYSTEM_DIR", "/tmp")
 BASE_URL = os.environ.get("PARADROP_BASE_URL", None)
+API_TOKEN = os.environ.get("PARADROP_API_TOKEN", None)
 
 RADIUS_SERVER = os.environ.get("CP_RADIUS_SERVER", None)
 RADIUS_SECRET = os.environ.get("CP_RADIUS_SECRET", None)
@@ -37,7 +38,10 @@ def readClients():
     # not support this API, so fall back to using the leases file.
     if BASE_URL is not None:
         url = "{}/networks/wifi/stations".format(BASE_URL)
-        request = requests.get(url)
+        headers = {}
+        if API_TOKEN is not None:
+            headers['Authorization'] = "Bearer " + API_TOKEN
+        request = requests.get(url, headers=headers)
         results = request.json()
         for client in results:
             yield client
