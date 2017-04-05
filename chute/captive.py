@@ -33,19 +33,28 @@ INTERIM_UPDATE_INTERVAL = 60
 IPTABLES_CLEAN_INTERVAL = 60
 
 
+# If BASE_URL is None, we are running on a version of ParaDrop that does
+# not support this API, so fall back to using the leases file.
+USE_API = (BASE_URL is not None)
+
+
 def readClients():
-    # If BASE_URL is None, we are running on a version of ParaDrop that does
-    # not support this API, so fall back to using the leases file.
-    if BASE_URL is not None:
+    if USE_API:
         url = "{}/networks/wifi/stations".format(BASE_URL)
         headers = {}
         if API_TOKEN is not None:
             headers['Authorization'] = "Bearer " + API_TOKEN
         request = requests.get(url, headers=headers)
-        results = request.json()
-        for client in results:
-            yield client
-        return
+        if request.status_code == 200:
+            results = request.json()
+            for client in results:
+                yield client
+            return
+        elif request.status_code == 401:
+            # We may get a 401 if there is a problem passing the auth check.
+            # In that case, fall back to using the leases file.
+            print("Received 401 from Paradrop daemon, falling back to leases file.")
+            USE_API = False
 
     if not os.path.exists(LEASES_FILE):
         return
@@ -117,7 +126,7 @@ class ClientTracker(object):
 
         # Only do interim updates if we can get stats from paradrop daemon.
         # Otherwise, all of the byte and packet counts are missing.
-        if BASE_URL is not None:
+        if USE_API:
             now = time.time()
             for client in self.clients.values():
                 if now > client['next-update']:
@@ -202,6 +211,8 @@ class ClientTracker(object):
             print("{}: {}".format(k, reply[k]))
 
     def onConnect(self, client):
+        print("Connect: {}".format(client['mac_addr']))
+
         client['start'] = int(time.time())
         client['next-update'] = client['start'] + INTERIM_UPDATE_INTERVAL
         client['session-id'] = "{:08x}".format(self.next_session_id)
@@ -241,6 +252,8 @@ class ClientTracker(object):
             print("{}: {}".format(k, reply[k]))
 
     def onDisconnect(self, client, cause="User-Request"):
+        print("Disconnect: {}".format(client['mac_addr']))
+
         request = self.radclient.CreateAcctPacket()
         for k, v in self.shared_fields.iteritems():
             request[k] = v
@@ -251,7 +264,7 @@ class ClientTracker(object):
         request['Calling-Station-Id'] = client['station-id']
         request['User-Name'] = RADIUS_USERNAME
 
-        if BASE_URL is not None:
+        if USE_API:
             request['Acct-Input-Octets'] = client.get('rx_bytes', 0)
             request['Acct-Input-Packets'] = client.get('rx_packets', 0)
             request['Acct-Output-Octets'] = client.get('tx_bytes', 0)
