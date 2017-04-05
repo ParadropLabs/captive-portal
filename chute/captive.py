@@ -38,6 +38,11 @@ IPTABLES_CLEAN_INTERVAL = 60
 USE_API = (BASE_URL is not None)
 
 
+def timestamp():
+    """ Return an integer timestamp. """
+    return int(time.time())
+
+
 def readClients():
     global USE_API
 
@@ -146,6 +151,7 @@ class ClientTracker(object):
         for k, v in self.shared_fields.iteritems():
             request[k] = v
         request['Acct-Status-Type'] = "Accounting-On"
+        request['Event-Timestamp'] = timestamp()
 
         reply = self.radclient.SendPacket(request)
         print("reply code: {}".format(reply.code))
@@ -175,6 +181,7 @@ class ClientTracker(object):
             request[k] = v
         request['Acct-Status-Type'] = "Accounting-Off"
         request['Acct-Terminate-Cause'] = "NAS-Reboot"
+        request['Event-Timestamp'] = timestamp()
 
         reply = self.radclient.SendPacket(request)
         print("reply code: {}".format(reply.code))
@@ -198,9 +205,10 @@ class ClientTracker(object):
         request['Acct-Output-Octets'] = client['tx_bytes']
         request['Acct-Output-Packets'] = client['tx_packets']
         request['Acct-Session-Id'] = client['session-id']
-        request['Acct-Session-Time'] = int(time.time()) - client['start']
+        request['Acct-Session-Time'] = timestamp() - client['start']
         request['Acct-Status-Type'] = "Interim-Update"
         request['Calling-Station-Id'] = client['station-id']
+        request['Event-Timestamp'] = timestamp()
         request['User-Name'] = RADIUS_USERNAME
 
         reply = self.radclient.SendPacket(request)
@@ -215,7 +223,7 @@ class ClientTracker(object):
     def onConnect(self, client):
         print("Connect: {}".format(client['mac_addr']))
 
-        client['start'] = int(time.time())
+        client['start'] = timestamp()
         client['next-update'] = client['start'] + INTERIM_UPDATE_INTERVAL
         client['session-id'] = "{:08x}".format(self.next_session_id)
         client['station-id'] = client['mac_addr'].upper().replace(':', '-')
@@ -260,7 +268,7 @@ class ClientTracker(object):
         for k, v in self.shared_fields.iteritems():
             request[k] = v
         request['Acct-Session-Id'] = client['session-id']
-        request['Acct-Session-Time'] = int(time.time()) - client['start']
+        request['Acct-Session-Time'] = timestamp() - client['start']
         request['Acct-Status-Type'] = "Stop"
         request['Acct-Terminate-Cause'] = cause
         request['Calling-Station-Id'] = client['station-id']
@@ -284,7 +292,7 @@ class ClientTracker(object):
 
 def cleanIptables():
     pattern = re.compile(r"MAC\s+(\S+)\s+.*expires\s+(\d+)")
-    now = int(time.time())
+    now = timestamp()
     expired = list()
 
     cmd = ["iptables", "-t", "mangle", "-L", "clients"]
