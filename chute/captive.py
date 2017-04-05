@@ -39,6 +39,8 @@ USE_API = (BASE_URL is not None)
 
 
 def readClients():
+    global USE_API
+
     if USE_API:
         url = "{}/networks/wifi/stations".format(BASE_URL)
         headers = {}
