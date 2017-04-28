@@ -18,10 +18,10 @@ SYSTEM_DIR = os.environ.get("PARADROP_SYSTEM_DIR", "/tmp")
 BASE_URL = os.environ.get("PARADROP_BASE_URL", None)
 API_TOKEN = os.environ.get("PARADROP_API_TOKEN", None)
 
-RADIUS_SERVER = os.environ.get("CP_RADIUS_SERVER", None)
-RADIUS_SECRET = os.environ.get("CP_RADIUS_SECRET", None)
-RADIUS_USERNAME = os.environ.get("CP_RADIUS_USERNAME", None)
-RADIUS_PASSWORD = os.environ.get("CP_RADIUS_PASSWORD", None)
+RADIUS_SERVER = os.environ.get("CP_RADIUS_SERVER", "")
+RADIUS_SECRET = os.environ.get("CP_RADIUS_SECRET", "")
+RADIUS_USERNAME = os.environ.get("CP_RADIUS_USERNAME", "")
+RADIUS_PASSWORD = os.environ.get("CP_RADIUS_PASSWORD", "")
 RADIUS_NAS_ID = os.environ.get("CP_RADIUS_NAS_ID", ROUTER_ID)
 
 
@@ -36,6 +36,9 @@ IPTABLES_CLEAN_INTERVAL = 60
 # If BASE_URL is None, we are running on a version of ParaDrop that does
 # not support this API, so fall back to using the leases file.
 USE_API = (BASE_URL is not None)
+
+# Enabled sending data to RADIUS server if the environment variable is set.
+ENABLE_RADIUS = (len(RADIUS_SERVER) > 0)
 
 
 def timestamp():
@@ -317,9 +320,7 @@ def cleanIptables():
 
 
 if __name__ == "__main__":
-    # If RADIUS_SERVER is defined, then set up the client tracker for
-    # authentication and accounting.
-    if RADIUS_SERVER is not None:
+    if ENABLE_RADIUS:
         client = pyrad.client.Client(server=RADIUS_SERVER,
                 secret=RADIUS_SECRET,
                 dict=pyrad.dictionary.Dictionary("radius-defs"))
@@ -333,5 +334,5 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         pass
 
-    if RADIUS_SERVER is not None:
+    if ENABLE_RADIUS:
         tracker.stop()
