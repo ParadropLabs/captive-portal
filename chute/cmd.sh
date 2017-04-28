@@ -1,7 +1,5 @@
 #!/bin/bash
 
-CLIENT_IFACE='wlan0'
-
 # start captivator dependencies
 /etc/init.d/rsyslog restart
 
@@ -31,7 +29,7 @@ iptables -N clients -t mangle
 # At the prerouting NAT stage this will DNAT them to the local
 # webserver for them to signup if they aren't authorised
 # Packets for unauthorised users are marked for dropping later
-iptables -t mangle -A PREROUTING -i ${CLIENT_IFACE} -j clients
+iptables -t mangle -A PREROUTING ! -i eth0 -j clients
 
 # MAC address not found. Mark the packet 99
 iptables -t mangle -A clients -j MARK --set-mark 99
@@ -40,13 +38,13 @@ iptables -t mangle -A clients -j MARK --set-mark 99
 iptables -t nat -A PREROUTING -m mark --mark 99 -p tcp --dport 80 -j REDIRECT --to-port 80
 
 # Forward return traffic from the Internet.
-iptables -A FORWARD -i eth0 -o wlan0 -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A FORWARD -i eth0 -m state --state ESTABLISHED,RELATED -j ACCEPT
 
 # Forward user traffic if it is authenticated (not marked) or DNS.  Drop anything else.
 # Some sites load content over UDP port 443 (might be QUIC, google.com/finance
 # seems to do tihs), so webpage can still load unless we block UDP.
-iptables -A FORWARD -i wlan0 -o eth0 -p udp --dport 53 -j ACCEPT
-iptables -A FORWARD -i wlan0 -o eth0 -m mark --mark 99 -j REJECT
+iptables -A FORWARD -o eth0 -p udp --dport 53 -j ACCEPT
+iptables -A FORWARD -o eth0 -m mark --mark 99 -j REJECT
 
 iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
 

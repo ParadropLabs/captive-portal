@@ -60,10 +60,10 @@ def readClients():
             for client in results:
                 yield client
             return
-        elif request.status_code == 401:
+        else:
             # We may get a 401 if there is a problem passing the auth check.
             # In that case, fall back to using the leases file.
-            print("Received 401 from Paradrop daemon, falling back to leases file.")
+            print("Received {} from Paradrop daemon, falling back to leases file.".format(request.status_code))
             USE_API = False
 
     if not os.path.exists(LEASES_FILE):
