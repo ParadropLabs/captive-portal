@@ -94,20 +94,26 @@ function is_authenticated() {
 
     curl_close($curl);
 
+    error_log("auth: $url $code $result");
+
     // Version 1.12 returns simple strings '1' or '0'.
     if ($result === '1') {
         return TRUE;
     } elseif ($result === '0') {
         return FALSE;
+    } elseif ($result === '') {
+        return FALSE;
     }
 
     // Version 1.2 returns JSON with integer auth values.
     // Example: '[{"auth":1,"email":""}]'
-    $data = json_decode($result);
-    if ($data[0]->auth === 1) {
-        return TRUE;
-    } elseif ($data[0]->auth === 0) {
-        return FALSE;
+    $data = @json_decode($result);
+    if (is_array($data) && !empty($data)) {
+        if ($data[0]->auth === 1) {
+            return TRUE;
+        } elseif($data[0]->auth === 0) {
+            return FALSE;
+        }
     }
 
     // Default: be kind to users?
