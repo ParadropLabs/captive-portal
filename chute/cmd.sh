@@ -32,7 +32,8 @@ iptables -N clients -t mangle
 iptables -t mangle -A PREROUTING ! -i eth0 -j clients
 
 # MAC address not found. Mark the packet 99
-iptables -t mangle -A clients -j MARK --set-mark 99
+# We hit this rule if nothing in the clients chain matched.
+iptables -t mangle -A PREROUTING ! -i eth0 -j MARK --set-mark 99
 
 # Redirects web requests from Unauthorised users to logon Web Page
 iptables -t nat -A PREROUTING -m mark --mark 99 -p tcp --dport 80 -j REDIRECT --to-port 80
