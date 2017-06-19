@@ -32,6 +32,9 @@ CLIENT_UPDATE_INTERVAL = 5
 INTERIM_UPDATE_INTERVAL = 60
 IPTABLES_CLEAN_INTERVAL = 60
 
+IPTABLES_CHAIN = "clients"
+IPTABLES_TARGET = "ACCEPT"
+
 
 # If BASE_URL is None, we are running on a version of ParaDrop that does
 # not support this API, so fall back to using the leases file.
@@ -313,9 +316,9 @@ def cleanIptables():
             expired.append((mac, expires))
 
     for mac, expires in expired:
-        cmd = ["iptables", "-t", "mangle", "-D", "clients", "-m", "mac",
+        cmd = ["iptables", "-t", "mangle", "-D", IPTABLES_CHAIN, "-m", "mac",
                 "--mac-source", mac, "-m", "comment", "--comment",
-                "expires {}".format(expires), "-j", "RETURN"]
+                "expires {}".format(expires), "-j", IPTABLES_TARGET]
         subprocess.call(cmd)
 
 
