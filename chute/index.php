@@ -33,6 +33,9 @@ $mac = find_mac();
 // Whether we should redirect to $login_url or to the local server.
 $redirect_local = FALSE;
 
+$IPTABLES_CHAIN = "clients";
+$IPTABLES_TARGET = "ACCEPT";
+
 /*
  * Find the client's MAC address.
  */
@@ -124,13 +127,16 @@ function is_authenticated() {
  * Grant wide area access to a MAC address by calling iptables.
  */
 function enable_address($mac, $expiration) {
+    global $IPTABLES_CHAIN;
+    global $IPTABLES_TARGET;
+
     $expires = time() + $expiration;
 
     // The comment specifies when the rule expires so it can be removed.
     $comment = "-m comment --comment 'expires $expires'";
 
-    // Add PC to the firewall
-    exec("sudo iptables -I clients 1 -t mangle -m mac --mac-source $mac $comment -j RETURN");
+    // Add a firewall rule that allows the user's traffic.
+    exec("sudo iptables -I $IPTABLES_CHAIN 1 -t mangle -m mac --mac-source $mac $comment -j $IPTABLES_TARGET");
 
     // The following line removes connection tracking for the PC
     // This clears any previous (incorrect) route info for the redirection
