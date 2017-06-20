@@ -74,14 +74,15 @@ function find_mac() {
  */
 function count_users() {
     $count = 0;
-	$source = @fopen("/paradrop/dnsmasq-wifi.leases", "r");
-	if ($source) {
+    $source = @fopen("/paradrop/dnsmasq-wifi.leases", "r");
+    if ($source) {
         while (!feof($source)) {
-            $line = fgets($source);
-            $count++;
+            if (fgets($source) !== false) {
+                $count++;
+            }
         }
         fclose($source);
-	}
+    }
     return $count;
 }
 
