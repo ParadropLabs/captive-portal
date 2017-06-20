@@ -70,6 +70,22 @@ function find_mac() {
 }
 
 /*
+ * Count number of users currently connected.
+ */
+function count_users() {
+    $count = 0;
+	$source = @fopen("/paradrop/dnsmasq-wifi.leases", "r");
+	if ($source) {
+        while (!feof($source)) {
+            $line = fgets($source);
+            $count++;
+        }
+        fclose($source);
+	}
+    return $count;
+}
+
+/*
  * Send a redirect (302) response.
  */
 function send_redirect($url) {
@@ -204,6 +220,7 @@ function post_initial_login() {
 
     $data = array(
         'mac' => $mac,
+        'cheese' => $count,
         'location' => $location
     );
 
@@ -327,7 +344,11 @@ if ($_SERVER['HTTP_HOST'] == $login_host) {
         send_redirect("http://$login_host");
         $action = "redirect_local";
     } else {
-        $url = "$login_url/?mac=$mac";
+        $count = count_users();
+
+        // cheese = current number of uses, obfuscated to be clever and not
+        // reveal that we are using it to limit the number of users.
+        $url = "$login_url/?mac=$mac&cheese=$count";
         send_redirect($url);
         $action = "redirect_remote";
     }
