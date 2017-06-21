@@ -190,8 +190,6 @@ function forward_request() {
  */
 function forward_login() {
     global $login_url;
-    global $location;
-    global $mac;
 
     $curl = curl_init();
 
@@ -221,7 +219,7 @@ function post_initial_login() {
 
     $data = array(
         'mac' => $mac,
-        'cheese' => $count,
+        'cheese' => count_users(),
         'location' => $location
     );
 
@@ -347,7 +345,7 @@ if ($_SERVER['HTTP_HOST'] == $login_host) {
     } else {
         $count = count_users();
 
-        // cheese = current number of uses, obfuscated to be clever and not
+        // cheese = current number of users, obfuscated to be clever and not
         // reveal that we are using it to limit the number of users.
         $url = "$login_url/?mac=$mac&cheese=$count";
         send_redirect($url);
