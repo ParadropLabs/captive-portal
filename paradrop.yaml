@@ -1,0 +1,27 @@
+version: 1
+config:
+  name: captive-portal
+  net:
+    wifi:
+      type: wifi
+      intfName: wlan0
+      dhcp:
+        lease: 1h
+        start: 3
+        limit: 250
+      ssid: 5NINES + PARADROP - Free WiFi
+      options:
+        isolate: true
+        maxassoc: 250
+  environment:
+    CP_AUTH_URL: https://cp-api.5nines.com/v1.13/3600
+    CP_LOGIN_URL: https://dev-paradrop.5nines.com/cp-login-1
+    CP_LANDING_URL: https://dev-paradrop.5nines.com
+    CP_LOCATION: 11
+    CP_ALLOW_DOMAIN: cp-api.5nines.com
+    CP_EXPIRATION: 3600
+    CP_RADIUS_SERVER:
+    CP_RADIUS_SECRET:
+    CP_RADIUS_USERNAME:
+    CP_RADIUS_PASSWORD:
+    CP_RADIUS_NAS_ID:
