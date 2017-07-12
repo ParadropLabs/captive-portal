@@ -78,6 +78,17 @@ def readClients():
             yield dict(zip(LEASES_FILE_FIELDS, parts))
 
 
+def evictDevice(mac):
+    """
+    Kick a device off the WiFi network.
+    """
+    url = "{}/networks/wifi/stations/{}".format(BASE_URL, mac)
+    headers = {}
+    if API_TOKEN is not None:
+        headers['Authorization'] = "Bearer " + API_TOKEN
+    request = requests.delete(url, headers=headers)
+
+
 class IntervalTimer(threading.Thread):
     def __init__(self, interval, function, *args, **kwargs):
         super(IntervalTimer, self).__init__()
@@ -300,6 +311,7 @@ def cleanIptables():
     pattern = re.compile(r"MAC\s+(\S+)\s+.*expires\s+(\d+)")
     now = timestamp()
     expired = list()
+    unexpired_macs = set()
 
     cmd = ["iptables", "-t", "mangle", "-L", "clients"]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
@@ -314,12 +326,20 @@ def cleanIptables():
         if now >= expires:
             print("Rule expiration: {}".format(mac))
             expired.append((mac, expires))
+        else:
+            unexpired_macs.add(mac)
 
     for mac, expires in expired:
         cmd = ["iptables", "-t", "mangle", "-D", IPTABLES_CHAIN, "-m", "mac",
                 "--mac-source", mac, "-m", "comment", "--comment",
                 "expires {}".format(expires), "-j", IPTABLES_TARGET]
         subprocess.call(cmd)
+
+        if USE_API and mac not in unexpired_macs:
+            # The last rule for this MAC address has expired, so kick it off
+            # the network to force it to go through the process of reconnecting
+            # and revisiting the landing page.
+            evictDevice(mac)
 
 
 if __name__ == "__main__":
