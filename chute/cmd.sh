@@ -69,6 +69,14 @@ python -u captive.py &
 # Monitor apache to make sure it actually starts and stays running.  We have
 # found that sometimes it does not start after the the first try, hence this
 # code.
+#
+# We have seen log messages like the following when apache fails to start.
+#
+# Action 'start' failed.
+# The Apache error log may have more information.
+# [Wed Jul 26 15:44:54.388967 2017] [:crit] [pid 101] (1)Operation not permitted: AH00141: Could not initialize random number generator
+#    ...fail!
+#  * The apache2 instance did not start within 20 seconds. Please read the log files to discover problems
 while true; do
     sleep 15
 
