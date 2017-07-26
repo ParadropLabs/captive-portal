@@ -1,14 +1,8 @@
 #!/bin/bash
 
-# start captivator dependencies
-/etc/init.d/rsyslog restart
-
-/bin/chmod a+x /var/www/index.pl
 /usr/sbin/a2enmod rewrite
 /usr/sbin/a2enmod cgid
 /usr/sbin/a2enmod php5
-
-echo 1 > /proc/sys/net/ipv4/ip_forward
 
 # Allow icmp
 iptables -t filter -A INPUT -p icmp --icmp-type 0  -j ACCEPT

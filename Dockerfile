@@ -4,14 +4,12 @@ MAINTAINER Paradrop Team <info@paradrop.io>
 
 # Install dependencies.
 RUN apt-get update && apt-get install -y \
-	apache2 \
-	iptables \
-	rsyslog \
-	conntrack \
-	aptitude \
-	libapache2-mod-php5 \
-    python-pip \
+    apache2 \
+    conntrack \
+    iptables \
+    libapache2-mod-php5 \
     php5-curl \
+    python-pip \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
     && mkdir -p /opt/captive-portal
