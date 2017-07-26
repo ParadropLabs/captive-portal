@@ -61,6 +61,22 @@ if [ -n "$CP_EXPIRATION" ]; then
     sed -i "s|expiration = .*;|expiration = $CP_EXPIRATION;|" /var/www/index.php
 fi
 
+# Call restart to apply configuration changes and get apache running.
 /etc/init.d/apache2 restart
 
-python -u captive.py
+python -u captive.py &
+
+# Monitor apache to make sure it actually starts and stays running.  We have
+# found that sometimes it does not start after the the first try, hence this
+# code.
+while true; do
+    sleep 15
+
+    pgrep apache2 >/dev/null
+    if [ $? -eq 0 ]; then
+        continue
+    else
+        echo "Apache is not running; attempting to restart."
+        /etc/init.d/apache2 restart
+    fi
+done
