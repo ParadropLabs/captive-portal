@@ -33,6 +33,11 @@ $mac = find_mac();
 // Whether we should redirect to $login_url or to the local server.
 $redirect_local = FALSE;
 
+// Glob for dnsmasq leases files.  Searching for all leases files is a very
+// general solution that supports multiple network types (VLAN, WiFi),
+// simultaneously if we so desire.
+$leases_glob = "/paradrop/dnsmasq-*.leases";
+
 $IPTABLES_CHAIN = "clients";
 $IPTABLES_TARGET = "ACCEPT";
 
@@ -44,16 +49,19 @@ function find_mac() {
 
     // Attempt to get the client's mac address
     $found_mac = false;
-    $source = @fopen("/paradrop/dnsmasq-wifi.leases", "r");
-    if ($source) {
-        while ($device = fscanf($source, "%s %s %s %s %s\n",
-                                $expiration, $mac, $ip, $name, $devid)) {
-            if ($ip == $_SERVER['REMOTE_ADDR']) {
-                $found_mac = true;
-                break;
+
+    foreach (glob($leases_glob) as $path) {
+        $source = @fopen($path, "r");
+        if ($source) {
+            while ($device = fscanf($source, "%s %s %s %s %s\n",
+                                    $expiration, $mac, $ip, $name, $devid)) {
+                if ($ip == $_SERVER['REMOTE_ADDR']) {
+                    $found_mac = true;
+                    break;
+                }
             }
+            fclose($source);
         }
-        fclose($source);
     }
 
     // Try with arp command in case the dnsmasq file is not available.
@@ -74,15 +82,19 @@ function find_mac() {
  */
 function count_users() {
     $count = 0;
-    $source = @fopen("/paradrop/dnsmasq-wifi.leases", "r");
-    if ($source) {
-        while (!feof($source)) {
-            if (fgets($source) !== false) {
-                $count++;
+
+    foreach (glob($leases_glob) as $path) {
+        $source = @fopen($path, "r");
+        if ($source) {
+            while (!feof($source)) {
+                if (fgets($source) !== false) {
+                    $count++;
+                }
             }
+            fclose($source);
         }
-        fclose($source);
     }
+
     return $count;
 }
 
