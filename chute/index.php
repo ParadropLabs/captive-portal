@@ -46,6 +46,7 @@ $IPTABLES_TARGET = "ACCEPT";
  */
 function find_mac() {
     global $arp;
+    global $leases_glob;
 
     // Attempt to get the client's mac address
     $found_mac = false;
@@ -81,6 +82,8 @@ function find_mac() {
  * Count number of users currently connected.
  */
 function count_users() {
+    global $leases_glob;
+
     $count = 0;
 
     foreach (glob($leases_glob) as $path) {
