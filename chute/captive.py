@@ -24,6 +24,9 @@ RADIUS_USERNAME = os.environ.get("CP_RADIUS_USERNAME", "")
 RADIUS_PASSWORD = os.environ.get("CP_RADIUS_PASSWORD", "")
 RADIUS_NAS_ID = os.environ.get("CP_RADIUS_NAS_ID", ROUTER_ID)
 
+AUTH_URL = os.environ.get("CP_AUTH_URL", "https://cp-api.5nines.com/v1.12")
+EXPIRATION = float(os.environ.get("CP_EXPIRATION", 3600))
+LOCATION = os.environ.get("CP_LOCATION", 0)
 
 LEASES_FILE = os.path.join(SYSTEM_DIR, "dnsmasq-wifi.leases")
 LEASES_FILE_FIELDS = ["expiration", "mac_addr", "ip_addr", "name", "devid"]
@@ -89,6 +92,31 @@ def evictDevice(mac):
     request = requests.delete(url, headers=headers)
 
 
+def is_allowed(mac):
+    url = "{}/{}/{}".format(AUTH_URL, LOCATION, mac)
+    req = requests.get(url)
+
+    # Version 1.12 returns a simple string "1" or "0".
+    contents = req.text.strip()
+    if contents == "1":
+        return True
+    elif contents == "0":
+        return False
+    elif contents == "":
+        return False
+
+    # Version 1.2 returns JSON with integer auth values.
+    data = req.json()
+    if isinstance(data, list) and len(data) > 0:
+        if data[0].get("auth", None) == 1:
+            return True
+        elif data[0].get("auth", None) == 0:
+            return False
+
+    # Default: be kind to the users.
+    return True
+
+
 class IntervalTimer(threading.Thread):
     def __init__(self, interval, function, *args, **kwargs):
         super(IntervalTimer, self).__init__()
@@ -112,17 +140,19 @@ class IntervalTimer(threading.Thread):
 
 
 class ClientTracker(object):
-    def __init__(self, radclient):
+    def __init__(self):
         self.clients = dict()
-        self.radclient = radclient
-        self.next_session_id = 0
         self.timer = IntervalTimer(CLIENT_UPDATE_INTERVAL, self.refresh)
+        self.listeners = {}
 
-        self.shared_fields = {
-            'Called-Station-Id': ROUTER_ID,
-            'NAS-Identifier': RADIUS_NAS_ID,
-            'NAS-Port-Type': "Wireless-802.11"
-        }
+    def add_listener(self, event_name, listener):
+        if event_name not in self.listeners:
+            self.listeners[event_name] = []
+        self.listeners[event_name].append(listener)
+
+    def dispatch(self, event_name, *args, **kwargs):
+        for listener in self.listeners.get(event_name, []):
+            listener(*args, **kwargs)
 
     def refresh(self):
         """
@@ -140,12 +170,12 @@ class ClientTracker(object):
             if mac in self.clients:
                 self.clients[mac].update(client)
             else:
-                self.onConnect(client)
+                self.dispatch("add-client", client)
                 self.clients[mac] = client
             new_macs.add(mac)
 
         for mac in (old_macs - new_macs):
-            self.onDisconnect(self.clients[mac])
+            self.dispatch("remove-client", client)
             del self.clients[mac]
 
         # Only do interim updates if we can get stats from paradrop daemon.
@@ -154,15 +184,45 @@ class ClientTracker(object):
             now = time.time()
             for client in self.clients.values():
                 if now > client['next-update']:
-                    self.update(client)
+                    self.dispatch("update-client", client)
                     client['next-update'] = now + INTERIM_UPDATE_INTERVAL
+
+    def start(self):
+        """
+        Start tracking clients.
+
+        Start the IntervalTimer to periodically call the refresh function.
+        """
+        self.timer.start()
+
+    def stop(self):
+        """
+        Stop tracking clients.
+
+        Cancel the IntervalTimer that calls the refresh function.
+        """
+        self.timer.cancel()
+
+        for client in self.clients.values():
+            self.dispatch("remove-client", reason="NAS-Reboot")
+
+
+class RadiusProducer(object):
+    def __init__(self, radclient):
+        self.radclient = radclient
+        self.next_session_id = 0
+
+        self.shared_fields = {
+            'Called-Station-Id': ROUTER_ID,
+            'NAS-Identifier': RADIUS_NAS_ID,
+            'NAS-Port-Type': "Wireless-802.11"
+        }
 
     def start(self):
         """
         Start accounting.
 
-        Send an Accounting-On message to the RADIUS server and start the
-        IntervalTimer to periodically call the refresh function.
+        Send an Accounting-On message to the RADIUS server.
         """
         request = self.radclient.CreateAcctPacket()
         for k, v in self.shared_fields.iteritems():
@@ -179,20 +239,12 @@ class ClientTracker(object):
         for k in reply.keys():
             print("{}: {}".format(k, reply[k]))
 
-        self.timer.start()
-
     def stop(self):
         """
         Stop accounting.
 
-        Send an Accounting-Off message to the RADIUS server and cancel the
-        IntervalTimer that calls the refresh function.
+        Send an Accounting-Off message to the RADIUS server.
         """
-        self.timer.cancel()
-
-        for client in self.clients.values():
-            self.onDisconnect(client, "NAS-Reboot")
-
         request = self.radclient.CreateAcctPacket()
         for k, v in self.shared_fields.iteritems():
             request[k] = v
@@ -342,13 +394,36 @@ def cleanIptables():
             evictDevice(mac)
 
 
+def grant_access(mac):
+    expires = int(time.time() + EXPIRATION)
+    comment = "expires {}".format(expires)
+
+    cmd = ["iptables", "--insert", IPTABLES_CHAIN, "--match", "mac",
+            "--mac-source", mac, "--match", "comment", "--comment", comment,
+            "--jump", IPTABLES_TARGET]
+    subprocess.call(cmd)
+
+
+def check_new_client(client):
+    if is_allowed(client['mac_addr']):
+        grant_access(client['mac_addr'])
+
+
 if __name__ == "__main__":
+    tracker = ClientTracker()
+    tracker.start()
+    tracker.add_listener("add-client", check_new_client)
+
     if ENABLE_RADIUS:
         client = pyrad.client.Client(server=RADIUS_SERVER,
                 secret=RADIUS_SECRET,
                 dict=pyrad.dictionary.Dictionary("radius-defs"))
-        tracker = ClientTracker(client)
-        tracker.start()
+        producer = RadiusProducer(client)
+        producer.start()
+
+        tracker.add_listener("add-client", producer.onConnect)
+        tracker.add_listener("remove-client", producer.onDisconnect)
+        tracker.add_listener("update-client", producer.update)
 
     try:
         while True:
@@ -357,5 +432,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         pass
 
+    tracker.stop()
     if ENABLE_RADIUS:
-        tracker.stop()
+        producer.stop()
