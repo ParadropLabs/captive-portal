@@ -172,6 +172,7 @@ class ClientTracker(object):
             else:
                 self.dispatch("add-client", client)
                 self.clients[mac] = client
+                client['next-update'] = time.time() + INTERIM_UPDATE_INTERVAL
             new_macs.add(mac)
 
         for mac in (old_macs - new_macs):
@@ -293,7 +294,6 @@ class RadiusProducer(object):
         print("Connect: {}".format(client['mac_addr']))
 
         client['start'] = timestamp()
-        client['next-update'] = client['start'] + INTERIM_UPDATE_INTERVAL
         client['session-id'] = "{:08x}".format(self.next_session_id)
         client['station-id'] = client['mac_addr'].upper().replace(':', '-')
         self.next_session_id += 1
