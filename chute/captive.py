@@ -176,7 +176,7 @@ class ClientTracker(object):
             new_macs.add(mac)
 
         for mac in (old_macs - new_macs):
-            self.dispatch("remove-client", client)
+            self.dispatch("remove-client", self.clients[mac])
             del self.clients[mac]
 
         # Only do interim updates if we can get stats from paradrop daemon.
