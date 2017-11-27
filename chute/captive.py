@@ -6,13 +6,18 @@ import subprocess
 import threading
 import time
 
+from urlparse import urlparse
+
 import pyrad
 import pyrad.client
 import pyrad.dictionary
 import pyrad.packet
 import requests
+import websocket
 
 
+CHUTE_NAME = os.environ.get("PARADROP_CHUTE_NAME", "captive-portal")
+FEATURES = os.environ.get("PARADROP_FEATURES", "")
 ROUTER_ID = os.environ.get("PARADROP_ROUTER_ID", "000000000000000000000000")
 SYSTEM_DIR = os.environ.get("PARADROP_SYSTEM_DIR", "/tmp")
 BASE_URL = os.environ.get("PARADROP_BASE_URL", None)
@@ -93,7 +98,7 @@ def evictDevice(mac):
 
 
 def is_allowed(mac):
-    url = "{}/{}/{}".format(AUTH_URL, LOCATION, mac)
+    url = "{}/{}/{}".format(AUTH_URL, mac, LOCATION)
     req = requests.get(url)
 
     # Version 1.12 returns a simple string "1" or "0".
@@ -398,9 +403,9 @@ def grant_access(mac):
     expires = int(time.time() + EXPIRATION)
     comment = "expires {}".format(expires)
 
-    cmd = ["iptables", "--insert", IPTABLES_CHAIN, "--match", "mac",
-            "--mac-source", mac, "--match", "comment", "--comment", comment,
-            "--jump", IPTABLES_TARGET]
+    cmd = ["iptables", "--table", "mangle", "--insert", IPTABLES_CHAIN,
+            "--match", "mac", "--mac-source", mac, "--match", "comment",
+            "--comment", comment, "--jump", IPTABLES_TARGET]
     subprocess.call(cmd)
 
 
@@ -409,10 +414,61 @@ def check_new_client(client):
         grant_access(client['mac_addr'])
 
 
+class HostapdControlChannel(object):
+    AP_STA_CONNECTED = re.compile(r"<(\d+)>\s*AP-STA-CONNECTED\s+(\S+)")
+
+    def on_error(self, ws, error):
+        print(error)
+
+    def on_message(self, ws, message):
+        message = message.strip()
+
+        # We receive the "OK" message in response to "ATTACH".
+        if message == "OK":
+            return
+
+        match = HostapdControlChannel.AP_STA_CONNECTED.match(message)
+        if match is not None:
+            print("New client associated: {}".format(match.group(2)))
+            client = dict(mac_addr=match.group(2))
+            check_new_client(client)
+            return
+
+        print("Unhandled hostapd control message: " + message)
+
+    def on_open(self, ws):
+        print("hostapd control channel: opened websocket connection")
+        ws.send("ATTACH")
+
+
 if __name__ == "__main__":
     tracker = ClientTracker()
     tracker.start()
-    tracker.add_listener("add-client", check_new_client)
+
+    # Fast transition support:
+    #
+    # Allow clients to quickly connect and begin using service if they have
+    # recently connected to a different AP. We do this by checking the auth
+    # server after the client is detected and granting access without the
+    # client taking action. If supported, we connect to the hostapd control
+    # interface to receive association events (immediate). Otherwise, we rely
+    # on the client tracker, which polls DHCP records (delayed).
+    features = set(FEATURES.split())
+    if USE_API and "hostapd-control" in features:
+        parts = urlparse(BASE_URL)
+        url = "ws://{}{}/networks/wifi/hostapd_control/ws".format(
+                parts.netloc, parts.path)
+        channel = HostapdControlChannel()
+        header = ["Authorization: Bearer {}".format(API_TOKEN)]
+        ws_app = websocket.WebSocketApp(url,
+                on_error=channel.on_error,
+                on_message=channel.on_message,
+                on_open=channel.on_open,
+                header=header)
+        ws_thread = threading.Thread(target=ws_app.run_forever)
+        ws_thread.start()
+    else:
+        tracker.add_listener("add-client", check_new_client)
 
     if ENABLE_RADIUS:
         client = pyrad.client.Client(server=RADIUS_SERVER,
